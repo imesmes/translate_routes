@@ -35,6 +35,14 @@ class RouteTranslator
   def default_locale? locale
     default_locale == locale.to_s
   end
+  
+  def routes_scope
+    @routes_scope ||= ''
+  end
+  
+  def routes_scope= scope
+    @routes_scope = scope.to_s
+  end
 
 
   class << self
@@ -145,9 +153,12 @@ class RouteTranslator
   module Translator
     # Translate a specific RouteSet, usually Rails.application.routes, but can
     # be a RouteSet of a gem, plugin/engine etc.
-    def translate route_set
+    def translate route_set, i18n_routes_scope
       Rails.logger.info "Translating routes (default locale: #{default_locale})" if defined?(Rails) && defined?(Rails.logger)
-
+      
+      self.routes_scope = i18n_routes_scope[:scope] if i18n_routes_scope.is_a? Hash 
+      
+      
       # save original routes and clear route set
       original_routes = route_set.routes.dup                     # Array [routeA, routeB, ...]
 
@@ -241,7 +252,11 @@ class RouteTranslator
     end
 
     def translate_string str, locale
-      @dictionary[locale.to_s][str.to_s]
+      if routes_scope.present?
+        @dictionary[locale.to_s][routes_scope][str.to_s] 
+      else
+        @dictionary[locale.to_s][str.to_s]
+      end
     end
 
     private
@@ -272,9 +287,10 @@ module ActionDispatch
           RouteTranslator.init_with_yield(&block).translate Rails.application.routes
         end
 
-        def translate_from_file *file_path
-          file_path = %w(config locales routes.yml) if file_path.blank?
-          RouteTranslator.init_from_file(File.join(Rails.root, *file_path)).translate Rails.application.routes
+        def translate_from_file *args
+          options = args.pop if args.last.is_a? Hash
+          args = %w(config locales routes.yml) if args.blank?
+          RouteTranslator.init_from_file(File.join(Rails.root, *args)).translate Rails.application.routes, options
         end
 
         def i18n *locales
